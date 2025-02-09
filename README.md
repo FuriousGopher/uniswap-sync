@@ -12,7 +12,8 @@ by syncing Uniswap V3 pool and tick data every 30 minutes.
 - Fetch Uniswap V3 pool and tick data from the subgraph using GraphQL.
 - Store and update the data in a PostgreSQL database.
 - Periodic synchronization every 30 minutes using NestJS cron jobs.
-- Supports scalability and easy extension.
+- Supports scalability and easy extension. 
+- Includes unit tests using Jest to ensure correctness.
 
 ## Technologies Used
 
@@ -22,6 +23,7 @@ by syncing Uniswap V3 pool and tick data every 30 minutes.
 - **TypeORM** - ORM for database interaction
 - **Axios** - HTTP client for fetching data from Uniswap's API
 - **GraphQL** - Fetching Uniswap V3 data
+- **Jest** - Unit testing framework
 
 ## Installation
 
@@ -70,3 +72,13 @@ including the **Uniswap API key**.
 ## Usage
 
 - The service automatically fetches data from Uniswap and syncs it with the database every **30 minutes**.
+
+## Testing
+
+- This project includes unit tests to verify the correctness of the Uniswap synchronization service.
+
+   ```sh
+   npm run test
+   ```
+  
+

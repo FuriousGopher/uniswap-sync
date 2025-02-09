@@ -1,8 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, Repository } from 'typeorm';
+import { DataSource } from 'typeorm';
 import { firstValueFrom } from 'rxjs';
 import { ConfigService } from '@nestjs/config';
 import { Pool } from './entity/pool.entity';
@@ -14,28 +13,27 @@ export class UniswapSyncService {
   private readonly logger = new Logger(UniswapSyncService.name);
   private readonly uniswapUrl: string;
   private readonly apiKey: string;
+  private readonly poolsLimit: number;
 
   constructor(
     private readonly httpService: HttpService,
     private readonly configService: ConfigService,
-    @InjectRepository(Pool)
-    private readonly poolRepository: Repository<Pool>,
-    @InjectRepository(Tick)
-    private readonly tickRepository: Repository<Tick>,
     private dataSource: DataSource,
   ) {
     this.uniswapUrl = this.configService.get<string>(
       'UNISWAP_V3_URL',
     ) as string;
     this.apiKey = this.configService.get<string>('UNISWAP_API_KEY') as string;
+    this.poolsLimit = this.configService.get<number>(
+      'UNISWAP_POOLS_LIMIT',
+      100,
+    );
   }
 
-  // @Cron(CronExpression.EVERY_30_MINUTES) //TODO uncomment
+  @Cron(CronExpression.EVERY_30_MINUTES)
   async syncUniswapData(): Promise<void> {
-    this.logger.warn('🔄 Fetching Uniswap V3 pool data...');
+    this.logger.warn('Fetching Uniswap V3 pool data...');
     const requestUrl = this.uniswapUrl.replace('{api-key}', this.apiKey);
-
-    //TODO add transactions  ---- check the types
 
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
@@ -47,7 +45,7 @@ export class UniswapSyncService {
           requestUrl,
           {
             query: `{
-              pools(first: 100) {
+              pools(first: ${this.poolsLimit}) {
                 id
                 token0 { id }
                 token1 { id }
@@ -71,7 +69,7 @@ export class UniswapSyncService {
       const poolsData: PoolData[] = response.data?.data?.pools || [];
 
       if (!poolsData.length) {
-        this.logger.warn('No pools found in the Uniswap response.');
+        this.logger.warn('No pools found in the Uniswap response');
         return;
       }
 
@@ -82,13 +80,7 @@ export class UniswapSyncService {
         liquidity: pool.liquidity,
       }));
 
-      await queryRunner.manager
-        .createQueryBuilder()
-        .insert()
-        .into(Pool)
-        .values(pools)
-        .orUpdate(['token0', 'token1', 'liquidity'], ['id'])
-        .execute();
+      await queryRunner.manager.upsert(Pool, pools, ['id']);
 
       for (const pool of poolsData) {
         if (pool.ticks && pool.ticks.length > 0) {
@@ -108,13 +100,7 @@ export class UniswapSyncService {
             pool: { id: pool.id } as Pool,
           }));
 
-          await queryRunner.manager
-            .createQueryBuilder()
-            .insert()
-            .into(Tick)
-            .values(ticks)
-            .orUpdate(['liquidityGross', 'liquidityNet'], ['tickIdx', 'poolId'])
-            .execute();
+          await queryRunner.manager.upsert(Tick, ticks, ['tickIdx', 'pool']);
         }
       }
 
